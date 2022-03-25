@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:vm="http://www.mulesoft.org/schema/mule/vm" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="f5ad5ab2-f957-445f-aa01-9441b8af8d55" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="canada123" database="mule" />
+	</db:config>
+	<file:config name="File_Config" doc:name="File Config" doc:id="c076e613-fc0f-4b1f-909f-e8226eaff8c3" />
+	<flow name="test1Flow" doc:id="c7517277-fc08-4079-8129-35ce3899c9be" initialState="started">
+		<vm:listener queueName="test" doc:name="Listener to test" doc:id="637cd490-584f-497b-bcc6-d595710c1c22" config-ref="VM_Config"/>
+		<logger level="INFO" doc:name="Logger" doc:id="aa4afcc7-9ebb-47cc-87fd-b931fc2929ec" />
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="3f12d00b-ede4-4d19-8a71-74a8f420c0ce" variableName="recPayload"/>
+		<ee:transform doc:name="Transform Message" doc:id="cf9e2a33-3f8d-4a44-b25c-3bd9feef61b4" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="currentTime" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	currentDateTime: vars.recPayload.currentDateTime
+}]]></ee:set-variable>
+				<ee:set-variable variableName="lastRun" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	productRun: ((vars.recPayload.A filter $.product == "A")).c[0]
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<set-variable value='#["test1"]' doc:name="Set Variable" doc:id="c733b401-c76f-4909-a44f-16043771eccd" variableName="entityName"/>
+		<try doc:name="Try" doc:id="7ddfa8f8-9327-4aef-9e0f-63bf1379366b" >
+			<db:select doc:name="Select" doc:id="dd4df541-3441-416c-988e-27d57c2ad163" config-ref="Database_Config">
+				<db:sql ><![CDATA[select * from worlddata where date>= :nowtime]]></db:sql>
+				<db:input-parameters ><![CDATA[#[{nowtime: vars.lastRun.productRun}]]]></db:input-parameters>
+			</db:select>
+			<error-handler >
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="e24f580f-91e8-43c7-9c4e-55bfb3c2fc5d" type="DB:BAD_SQL_SYNTAX">
+					<logger level="INFO" doc:name="Logger" doc:id="beb4bf94-040c-4c48-a58a-8c8c193122e1" />
+				</on-error-propagate>
+			</error-handler>
+		</try>
+		<ee:transform doc:name="Transform Message" doc:id="ca5973ab-9665-4b46-b3f2-ca5f9b98c81a" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload map (value,indexOf) -> {
+	name: value.name
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<batch:job jobName="test1Batch_Job" doc:id="dd7f23c3-1f6a-4483-a6cd-7d892f24e106" >
+			<batch:process-records >
+				<batch:step name="Batch_Step" doc:id="bd800fc8-0f65-4568-b7cd-637c3801e25f" >
+					<ee:transform doc:name="Transform Message" doc:id="e34cecc4-6fd0-459b-b9ef-6c97684d3c8d" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="f60a3e06-666d-4d69-9afb-a1dbfa7da766" size="2">
+						<ee:transform doc:name="Transform Message" doc:id="a8d4c3b2-c15f-4e1c-8fa6-dbdbf9448bdc" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/csv
+---
+payload]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						<file:write doc:name="Write" doc:id="7d6c0e1e-a50a-44f7-8782-f3198358df44" config-ref="File_Config" path='#["/Users/anil.kumar/Documents/csv/textfile" ++ now() ++ ".csv"]'/>
+					</batch:aggregator>
+				</batch:step>
+			</batch:process-records>
+			<batch:on-complete >
+				<logger level="INFO" doc:name="Logger" doc:id="38d39654-4f3b-4551-a6fc-ecff6c4bb5a7" />
+			</batch:on-complete>
+		</batch:job>
+		<logger level="INFO" doc:name="Logger" doc:id="4f211481-2848-4511-b07f-a949ab2e4601" message="print payload ::#[payload]"/>
+	</flow>
+	<flow name="test1Flow1" doc:id="f49ec06d-3e4a-48d4-a63f-37ec71617f6c" >
+		<vm:listener doc:name="Listener to test2" doc:id="38178803-c4ed-4bcf-a247-64fb4a791134" config-ref="VM_Config" queueName="test2"/>
+		<logger level="INFO" doc:name="Logger" doc:id="bcf81173-0f45-43ad-9002-c956bdb494a3" />
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="93f8f395-d5c1-4589-88f9-f1c1edb3c87b" variableName="recPayload" />
+		<ee:transform doc:name="Transform Message" doc:id="44dcbfec-b3cb-43d7-b82b-504c95d0b7f0" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="currentTime" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	currentDateTime: vars.recPayload.currentDateTime
+}]]></ee:set-variable>
+				<ee:set-variable variableName="lastRun" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	productRun: ((vars.recPayload.A filter $.product == "B")).c[0]
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<set-variable value='#["test2"]' doc:name="Set Variable" doc:id="d8ba4f31-6f8a-48a0-b587-a1df6bcb0d0d" variableName="entityName" />
+		<db:select doc:name="Select" doc:id="ae5a2b02-ca9c-4851-8d47-50fe81c5b107" config-ref="Database_Config">
+			<db:sql ><![CDATA[select * from universeddata where date>= :nowtime]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{nowtime: vars.lastRun.productRun}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="1e7db7e8-9a30-4ff5-9bc0-b34160f652d4" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload map (value,indexOf) -> {
+	name: value.name,
+	country: value.country
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<batch:job jobName="test1Batch_Job1" doc:id="89cd92db-16a7-4f7f-954e-b23ac965a0a9" >
+			<batch:process-records >
+				<batch:step name="Batch_Step1" doc:id="c6a107a9-4a06-4657-9395-3246344c4320" >
+					<ee:transform doc:name="Transform Message" doc:id="1a01b253-94b2-43e5-898a-871e09f14432" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="ec8cf53e-24dc-46b9-95f1-062cb5ef89de" streaming="true">
+						<ee:transform doc:name="Transform Message" doc:id="b88484b2-aff0-44f5-a230-923566f481d2" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/csv
+---
+payload]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						<file:write doc:name="Write" doc:id="ed3aa42b-259b-4d55-814a-f86d515af079" config-ref="File_Config" path='#["/Users/anil.kumar/Documents/csv1/textfile" ++ now() ++ ".csv"]'/>
+					</batch:aggregator>
+				</batch:step>
+			</batch:process-records>
+			<batch:on-complete >
+				<logger level="INFO" doc:name="Logger" doc:id="d33fd343-c882-496d-b3ce-4e2330b6e8e6" />
+			</batch:on-complete>
+		</batch:job>
+	</flow>
+</mule>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="853e3e87-dada-4c15-804d-06178f0d6b08" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<vm:config name="VM_Config" doc:name="VM Config" doc:id="4b15d2bb-53f7-44aa-893e-198a5ef31e9c" >
+		<vm:queues >
+			<vm:queue queueName="test" />
+			<vm:queue queueName="test2" />
+		</vm:queues>
+	</vm:config>
+	<flow name="testFlow" doc:id="a7f77441-d407-47cf-8e9e-30923cff6d8f" >
+		<http:listener doc:name="Listener" doc:id="1245378f-6bcb-4373-a055-e45cc2458c30" config-ref="HTTP_Listener_config" path="/test" allowedMethods="POST">
+			<http:response >
+				<http:body ><![CDATA[#[output application/json --- payload]]]></http:body>
+			</http:response>
+		</http:listener>
+		<ee:transform doc:name="Transform Message" doc:id="9a025457-1600-4d70-a7ef-e6cb08458130" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<scatter-gather doc:name="Scatter-Gather" doc:id="8e14c6e6-e268-49d2-8a22-7ece5c656a7e" >
+			<route >
+				<vm:publish queueName="test" doc:name="Publish to test" doc:id="826d3ddb-6fb8-4f23-95b6-84571b899179" config-ref="VM_Config" sendCorrelationId="ALWAYS" correlationId="#[correlationId]" />
+			</route>
+			<route >
+				<vm:publish doc:name="Publish to test2" doc:id="8f02eda9-3669-404b-b3ff-f38463de8ce7" config-ref="VM_Config" queueName="test2"/>
+			</route>
+		</scatter-gather>
+	</flow>
+</mule>
